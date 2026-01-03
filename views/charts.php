@@ -1,4 +1,5 @@
 <?php
+// views/charts.php – FINAL OPTIMIZED 2025
 session_start();
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../login.php');
@@ -9,7 +10,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../controllers/SongController.php';
 
 $songCtrl = new SongController();
-$topSongs = $songCtrl->getTopPlayed($_SESSION['user_id'], 20); 
+$topSongs = $songCtrl->charts($_SESSION['user_id'], 20); // Top 20
 
 include __DIR__ . '/../includes/header.php';
 include __DIR__ . '/../includes/sidebar.php';
@@ -18,95 +19,92 @@ include __DIR__ . '/../includes/sidebar.php';
 <div class="main-content">
     <div class="container-fluid px-4 py-5">
 
-        <!-- HEADER SIÊU ĐỈNH CAO -->
-        <div class="charts-header mb-5 d-flex align-items-center gap-4">
-            <div class="charts-icon">
-                <i class="fas fa-fire text-danger"></i>
+        <div class="d-flex align-items-end gap-4 mb-5 animate-fade-in">
+            <div class="chart-header-icon">
+                <i class="fas fa-trophy"></i>
             </div>
             <div>
-                <h1 class="display-1 fw-bolder text-gradient mb-2" style="font-size:5.5rem;">
+                <h6 class="text-uppercase text-muted fw-bold ls-2 mb-1">Thống kê</h6>
+                <h1 class="display-3 fw-bolder text-white mb-2" style="text-shadow: 0 0 40px rgba(255,255,255,0.15);">
                     Bảng Xếp Hạng
                 </h1>
-                <p class="fs-3 text-white-50 mb-0">
-                    <i class="fas fa-headphones me-2"></i>
-                    Top 20 bài hát đang được nghe nhiều nhất
+                <p class="text-white-50 fs-5 mb-0">
+                    Top 20 bài hát được nghe nhiều nhất tuần này
                 </p>
             </div>
         </div>
 
-        <!-- DANH SÁCH BÀI HÁT XẾP HẠNG -->
         <div class="charts-list">
             <?php if (empty($topSongs)): ?>
-                <div class="text-center py-5 my-5">
-                    <i class="fas fa-headphones fa-6x text-primary mb-4" style="opacity: 0.2;"></i>
-                    <h3 class="text-muted fw-light">Chưa có dữ liệu lượt nghe</h3>
-                    <p class="text-muted">Hãy bắt đầu nghe nhạc để tạo bảng xếp hạng nhé!</p>
+                <div class="empty-state text-center py-5">
+                    <i class="fas fa-chart-bar fa-6x text-secondary mb-4 opacity-25"></i>
+                    <h3 class="text-white fw-bold">Chưa có dữ liệu</h3>
+                    <p class="text-muted">Hãy nghe nhạc để kích hoạt bảng xếp hạng!</p>
                 </div>
             <?php else: ?>
+                
+                <div class="chart-header-row text-muted small text-uppercase fw-bold px-4 pb-2 border-bottom border-secondary border-opacity-25 mb-2 d-none d-md-flex">
+                    <div style="width: 60px;" class="text-center">#</div>
+                    <div class="flex-grow-1">Bài hát</div>
+                    <div style="width: 150px;" class="text-end">Lượt nghe</div>
+                    <div style="width: 120px;" class="text-center">Thao tác</div>
+                </div>
+
                 <?php foreach ($topSongs as $index => $song): 
+                    $rank = $index + 1;
                     $plays = number_format($song['play_count'] ?? 0);
-                    $isTop3 = $index < 3;
+                    $isTop3 = $rank <= 3;
+                    $rankClass = $isTop3 ? "rank-top rank-$rank" : "rank-normal";
+                    
+                    // Xử lý ảnh an toàn
+                    $imgSrc = !empty($song['image']) ? "../assets/songs/images/" . htmlspecialchars($song['image']) : "../assets/songs/images/default1.jpg";
+                    $audioSrc = "../assets/songs/audio/" . htmlspecialchars($song['audio_file']);
                 ?>
-                    <div class="song-row song-card position-relative overflow-hidden rounded-4 mb-3 p-3" 
-                         style="background:rgba(30,30,50,0.6);border:1px solid rgba(0,212,255,0.2);"
+                    <div class="song-row rounded-4 p-2 mb-2 d-flex align-items-center position-relative transition-all"
                          data-song-id="<?= $song['id'] ?>"
                          data-title="<?= htmlspecialchars($song['title']) ?>"
-                         data-artist="<?= htmlspecialchars($song['artist'] ?? 'Không rõ') ?>"
-                         data-audio="../assets/songs/audio/<?= htmlspecialchars($song['audio_file']) ?>"
-                         data-image="../assets/songs/images<?= htmlspecialchars($song['image'] ?? 'default.jpg') ?>"
-                         onclick="playSongFromCard(this)">
-
-                        <!-- XẾP HẠNG VỚI HUY HIỆU VÀNG/BẠC/ĐỒNG -->
-                        <div class="song-rank d-flex align-items-center justify-content-center">
+                         data-artist="<?= htmlspecialchars($song['artist'] ?? 'Unknown') ?>"
+                         data-audio="<?= $audioSrc ?>"
+                         data-image="<?= $imgSrc ?>"
+                         onclick="playSongFromCard(this)"> <div class="chart-rank d-flex justify-content-center align-items-center" style="width: 60px; flex-shrink: 0;">
                             <?php if ($isTop3): ?>
-                                <div class="rank-medal rank-<?= $index + 1 ?>">
-
-                                    <i class="fas fa-medal"></i>
-                                </div>
+                                <span class="<?= $rankClass ?> fs-3 fw-bold"><?= $rank ?></span>
                             <?php else: ?>
-                                <span class="rank-number"><?= $index + 1 ?></span>
+                                <span class="text-muted fs-5 fw-bold"><?= $rank ?></span>
                             <?php endif; ?>
                         </div>
 
-                        <div class="song-info d-flex align-items-center gap-3 flex-grow-1">
-                            <img src="../assets/songs/images/<?= htmlspecialchars($song['image'] ?? 'default.jpg') ?>" 
-                                 class="song-thumb rounded shadow" 
-                                 onerror="this.src='../assets/songs/images/default.jpg'">
-                            <div>
-                                <div class="song-title fw-bold text-white fs-5">
-                                    <?= htmlspecialchars($song['title']) ?>
+                        <div class="d-flex align-items-center gap-3 flex-grow-1 overflow-hidden">
+                            <div class="position-relative flex-shrink-0" style="width: 50px; height: 50px;">
+                                <img src="<?= $imgSrc ?>" class="w-100 h-100 object-fit-cover rounded-3 shadow-sm" loading="lazy">
+                                <div class="mini-play-overlay">
+                                    <i class="fas fa-play text-white"></i>
                                 </div>
-                                <div class="song-artist text-muted">
-                                    <?= htmlspecialchars($song['artist'] ?? 'Không rõ') ?>
-                                </div>
+                            </div>
+                            <div class="text-truncate">
+                                <h6 class="text-white mb-0 text-truncate fw-bold"><?= htmlspecialchars($song['title']) ?></h6>
+                                <small class="text-muted"><?= htmlspecialchars($song['artist'] ?? 'Unknown') ?></small>
                             </div>
                         </div>
 
-                        <!-- LƯỢT NGHE -->
-                        <div class="song-plays text-center">
-                            <i class="fas fa-headphones text-primary me-2"></i>
-                            <span class="fw-bold text-white"><?= $plays ?></span>
-                            <small class="text-muted d-block">lượt nghe</small>
+                        <div class="text-end text-white-50 fw-medium d-none d-sm-block" style="width: 150px; flex-shrink: 0;">
+                            <?= $plays ?>
                         </div>
 
-                        <!-- NÚT HÀNH ĐỘNG -->
-                        <div class="song-actions d-flex align-items-center gap-3">
-                            <button class="btn-like <?= ($song['is_favorite'] ?? 0) ? 'active' : '' ?>" 
-                                    data-song-id="<?= $song['id'] ?>" 
-                                    onclick="event.stopPropagation(); toggleFavorite(this);">
-                                <i class="fas fa-heart"></i>
+                        <div class="chart-actions d-flex justify-content-center gap-2" style="width: 120px; flex-shrink: 0;">
+                            <button class="btn-icon btn-like" data-song-id="<?= $song['id'] ?>" onclick="event.stopPropagation()">
+                                <i class="fa<?= $song['is_favorite'] ? 's' : 'r' ?> fa-heart <?= $song['is_favorite'] ? 'text-danger' : '' ?>"></i>
                             </button>
-                            <button class="btn-add-to-album" 
+                            
+                            <button class="btn-icon btn-add" 
                                     data-song-id="<?= $song['id'] ?>" 
                                     data-bs-toggle="modal" 
                                     data-bs-target="#addToAlbumModal"
-                                    onclick="event.stopPropagation();">
+                                    onclick="event.stopPropagation()">
                                 <i class="fas fa-plus"></i>
                             </button>
-                            <div class="play-icon">
-                                <i class="fas fa-play fa-2x"></i>
-                            </div>
                         </div>
+
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -124,104 +122,117 @@ include __DIR__ . '/../includes/add_to_album_modal.php';
 <script src="../assets/js/script.js"></script>
 
 <style>
-.charts-header .charts-icon {
-    font-size: 7rem;
-    font-weight: 900;
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 30%, #f39c12 70%, #e74c3c 100%);
-    background-size: 200% 200%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent; 
-
-    animation: pulseGlow 3s ease-in-out infinite, gradientFlow 8s ease infinite;
-
-    display: inline-block;
-    text-shadow: 0 0 30px rgba(255, 107, 107, 0.4);
+/* Header Icon Animation */
+.chart-header-icon {
+    width: 80px; height: 80px;
+    background: linear-gradient(135deg, #FFD700, #FF8C00);
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.5rem; color: #fff;
+    box-shadow: 0 10px 30px rgba(255, 140, 0, 0.4);
+    transform: rotate(-10deg);
 }
 
-/* HIỆU ỨNG ĐẬP NHẸ (PULSE) */
-@keyframes pulseGlow {
-    0%, 100% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 20px rgba(255, 107, 107, 0.5));
-    }
-    50% {
-        transform: scale(1.05);
-        filter: drop-shadow(0 0 50px rgba(238, 90, 36, 0.9));
-    }
-}
-
-/* HIỆU ỨNG GRADIENT CHẢY MƯỢT */
-@keyframes gradientFlow {
-    0%   { background-position: 0% 50%; }
-    50%  { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
-
+/* Song Row Styling */
 .song-row {
-    display: grid;
-    grid-template-columns: 80px 1fr 180px 150px;
-    gap: 1rem;
-    transition: all 0.4s ease;
+    background: rgba(255, 255, 255, 0.02); /* Rất mờ */
+    border: 1px solid transparent;
     cursor: pointer;
 }
+
 .song-row:hover {
-    background: rgba(0,212,255,0.15) !important;
-    transform: translateY(-5px) scale(1.01);
-    box-shadow: 0 20px 40px rgba(0,212,255,0.2);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.1);
 }
 
-.rank-medal {
-    width: 60px; height: 60px;
+/* Rank Styling */
+.rank-top { 
+    text-shadow: 0 0 15px currentColor;
+    display: inline-block;
+    width: 30px; text-align: center;
+}
+.rank-1 { color: #FFD700; font-size: 1.8rem !important; } /* Vàng */
+.rank-2 { color: #C0C0C0; font-size: 1.6rem !important; } /* Bạc */
+.rank-3 { color: #CD7F32; font-size: 1.5rem !important; } /* Đồng */
+
+/* Action Buttons (Nút tròn nhỏ) */
+.btn-icon {
+    width: 36px; height: 36px;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    animation: bounce 2s infinite;
-}
-.rank-1 { background: linear-gradient(135deg, #ffd700, #ffb347); box-shadow: 0 0 30px #ffd700; }
-.rank-2 { background: linear-gradient(135deg, #c0c0c0, #a9a9a9); box-shadow: 0 0 30px #c0c0c0; }
-.rank-3 { background: linear-gradient(135deg, #cd7f32, #b87333); box-shadow: 0 0 30px #cd7f32; }
-@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-
-.rank-number { font-size: 2.2rem; font-weight: 900; color: #aaa; }
-
-.song-thumb { width: 70px; height: 70px; object-fit: cover; }
-
-.song-plays { font-size: 1.1rem; }
-
-.song-actions { opacity: 0; transition: all 0.4s ease; }
-.song-row:hover .song-actions { opacity: 1; }
-
-.play-icon {
-    width: 60px; height: 60px;
-    background: var(--primary);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transform: scale(0);
-    transition: all 0.4s ease;
-}
-.song-row:hover .play-icon {
-    opacity: 1;
-    transform: scale(1);
+    border: 1px solid rgba(255,255,255,0.1);
+    background: transparent;
+    color: #ccc;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s ease;
 }
 
-.btn-like, .btn-add-to-album {
-    width: 45px; height: 45px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255,255,255,0.1);
-    color: white;
-    font-size: 1.2rem;
-    transition: all 0.3s ease;
+.btn-icon:hover {
+    background: rgba(255,255,255,1);
+    color: #000;
+    transform: scale(1.1);
 }
-.btn-like.active, .btn-like:hover { background: #e74c3c; transform: scale(1.2); }
-.btn-add-to-album:hover { background: #00D4FF; transform: scale(1.2); }
+
+.btn-like:hover { color: #e74c3c; background: rgba(255,255,255,0.9); }
+.btn-like i.text-danger { color: #e74c3c; }
+
+/* Mini Play Overlay trên ảnh nhỏ */
+.mini-play-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: 0.2s;
+}
+.song-row:hover .mini-play-overlay { opacity: 1; }
+
+/* Responsive */
+@media (max-width: 576px) {
+    .display-3 { font-size: 2.5rem; }
+    .chart-header-icon { width: 60px; height: 60px; font-size: 1.8rem; }
+    .song-row { padding: 0.5rem; }
+}
 </style>
+
+<script>
+document.addEventListener('click', function(e) {
+    // Xử lý nút Like (Delegation)
+    const btn = e.target.closest('.btn-like');
+    if (btn) {
+        const songId = btn.dataset.songId;
+        const icon = btn.querySelector('i');
+
+        // Hiệu ứng click ngay lập tức (Optimistic UI)
+        const isCurrentlyLiked = icon.classList.contains('fa-solid');
+        
+        // Toggle UI
+        if (isCurrentlyLiked) {
+            icon.classList.remove('fa-solid', 'text-danger');
+            icon.classList.add('fa-regular');
+        } else {
+            icon.classList.remove('fa-regular');
+            icon.classList.add('fa-solid', 'text-danger');
+        }
+
+        // Gửi request ngầm
+        fetch('../ajax/favorite_toggle.php', {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "song_id=" + songId
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status !== 'success') {
+                // Revert nếu lỗi server
+                alert(data.message || "Lỗi server");
+                if (isCurrentlyLiked) {
+                    icon.classList.add('fa-solid', 'text-danger');
+                    icon.classList.remove('fa-regular');
+                } else {
+                    icon.classList.add('fa-regular');
+                    icon.classList.remove('fa-solid', 'text-danger');
+                }
+            }
+        })
+        .catch(err => console.error(err));
+    }
+});
+</script>

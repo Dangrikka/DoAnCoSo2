@@ -1,20 +1,36 @@
-// assets/js/script.js – PHIÊN BẢN CUỐI CÙNG HOÀN HẢO NHẤT THẾ GIỚI 2025
+// assets/js/script.js – FINAL FIX DOUBLE COUNT 2025
 (() => {
-    // Tắt hiệu ứng nếu máy yếu
-    if (/low-performance|kill-all-effects/.test(document.documentElement.className)) {
-        document.body.style.opacity = '1';
+    // 🛑 STOP: Ngăn script chạy 2 lần nếu lỡ được include trùng lặp trong HTML
+    if (window.HAS_INIT_MUSIC_PLAYER) {
+        console.warn('⚠️ Music Player Script đã được tải trước đó. Bỏ qua lần khởi tạo thứ 2.');
         return;
     }
+    window.HAS_INIT_MUSIC_PLAYER = true;
 
-    const audio = new Audio();
-    let playlist = [];
-    let currentIndex = -1;
+    /* ================= CORE ================= */
+    const _domAudio = document.getElementById('audio');
+    const audio = _domAudio ? _domAudio : new Audio();
+    audio.preload = 'metadata';
+
+    window.playlist = [];
+    window.currentIndex = -1;
+
     let isPlaying = false;
     let isShuffle = false;
     let isRepeat = false;
+    let isSwitchingSong = false;
+    let shuffleOrder = [];
+    let shufflePos = -1;
 
-    const $  = s => document.querySelector(s);
-    const $$ = s => document.querySelectorAll(s);
+    // --- LOGIC TÍNH VIEW CHẶT CHẼ ---
+    // Thay vì dùng true/false, ta lưu ID của bài hát đã đếm view phiên này
+    let lastCountedSongId = null; 
+    const MIN_LISTEN_TIME = 10; // Nghe trên 10s mới tính
+    const lastIncrementedTime = {}; // Lưu timestamp để debounce
+    const INCREMENT_SKIP_WINDOW = 60 * 1000; // 60s
+
+    const $ = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
 
     const els = {
         player: $('#musicPlayer'),
@@ -23,7 +39,7 @@
         next: $('.next-btn'),
         shuffle: $('.shuffle-btn'),
         repeat: $('.repeat-btn'),
-        progressBar: $('.progress'),
+        progress: $('.progress'),
         progressContainer: $('.progress-container'),
         currentTime: $('.current-time'),
         duration: $('.duration'),
@@ -34,292 +50,332 @@
         favoriteBtn: $('#playerFavoriteBtn')
     };
 
-    // === TẢI PLAYLIST ===
-    const loadPlaylist = () => {
-        playlist = Array.from($$('.song-card, .song-row'))
-            .map(el => ({
-                id: parseInt(el.dataset.songId, 10) || null,
-                title: el.dataset.title || 'Không rõ',
-                artist: el.dataset.artist || 'Nghệ sĩ không rõ',
-                audio: el.dataset.audio || '',
-                image: el.dataset.image || '../assets/songs/images/default.jpg',
-                isFavorite: el.dataset.isFavorite === 'true' || el.dataset.isFavorite === '1'
-            }))
-            .filter(s => s.id && s.audio);
+    /* ============== CHỐNG CLICK LAN ============== */
+    els.player?.addEventListener('click', e => e.stopPropagation());
 
-        console.log(`Playlist loaded: ${playlist.length} songs`);
-    };
+    /* ================= PLAYLIST ================= */
+    function buildPlaylistFromDOM(sourceEl = null) {
+        let container = null;
+        if (sourceEl) container = sourceEl.closest('[data-playlist]');
+        if (!container && sourceEl) container = sourceEl.closest('.song-grid, .song-list, .playlist, .songs-list') || sourceEl.parentElement;
+        if (!container) container = document.querySelector('[data-playlist="main"]');
 
-    // === PHÁT BÀI HÁT ===
-    const playSong = (index) => {
-        if (index < 0 || index >= playlist.length) return;
+        let nodes = [];
+        if (!container && sourceEl) nodes = [sourceEl];
+        else if (container) nodes = Array.from(container.querySelectorAll('.song-card, .song-row, .chart-item'));
+
+        window.playlist = nodes.map(el => ({
+            id: String(el.dataset.songId),
+            title: el.dataset.title || el.querySelector('.song-title')?.textContent || 'Không rõ',
+            artist: el.dataset.artist || el.querySelector('.song-artist')?.textContent || 'Không rõ',
+            audio: el.dataset.audio,
+            image: el.dataset.image || '../assets/songs/images/default.jpg',
+            isFavorite: el.dataset.isFavorite === '1'
+        })).filter(s => s.id && s.audio);
+
+        if (isShuffle) rebuildShuffleOrder();
+        return window.playlist;
+    }
+
+    /* ================= PLAY SONG ================= */
+    function playSong(index, autoplay = true) {
+        if (isSwitchingSong) return;
+        isSwitchingSong = true;
+
+        if (!playlist.length) buildPlaylistFromDOM();
+        if (!playlist.length) { isSwitchingSong = false; return; }
+
+        if (index < 0) index = playlist.length - 1;
+        if (index >= playlist.length) index = 0;
+
+        if (index === currentIndex && isPlaying) { isSwitchingSong = false; return; }
 
         const song = playlist[index];
+        if (!song) { isSwitchingSong = false; return; }
+
+        audio.pause();
+        audio.src = '';
+        audio.currentTime = 0;
+
+        // 🔄 RESET: Khi đổi bài, xóa trạng thái "đã đếm" của bài trước đi
+        // Tuy nhiên KHÔNG xóa lastIncrementedTime để giữ debounce nếu user quay lại bài cũ ngay lập tức
+        lastCountedSongId = null; 
+
         currentIndex = index;
+        if (isShuffle) {
+            if (!shuffleOrder.length || shuffleOrder.length !== playlist.length) rebuildShuffleOrder();
+            shufflePos = shuffleOrder.indexOf(currentIndex);
+        }
 
-        audio.src = song.audio;
+        try {
+            const resolved = new URL(song.audio, location.href).href;
+            audio.src = resolved;
+        } catch (e) {
+            audio.src = song.audio;
+        }
         audio.load();
+        updatePlayer(song);
 
-        audio.play().then(() => {
-            isPlaying = true;
-            updatePlayPauseIcon(true);
-            updatePlayer(song);
-            highlightCurrentSong();
-            els.player?.classList.add('playing');
+        if (autoplay) {
+            audio.play().then(() => {
+                isPlaying = true;
+                updatePlayPause(true);
+            }).catch(err => {
+                if (err && err.name !== 'AbortError') console.error(err);
+            }).finally(() => {
+                isSwitchingSong = false;
+            });
+        } else {
+            isSwitchingSong = false;
+        }
+    }
 
-            // Tăng lượt nghe – an toàn tuyệt đối
-            song.id && fetch('../ajax/increment_play.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'song_id=' + song.id
-            }).catch(() => {});
+    window.playSong = playSong;
+    window.buildPlaylistFromDOM = buildPlaylistFromDOM;
 
-        }).catch(err => {
-            console.error('Play error:', err);
-            showToast('Không thể phát bài hát này!', 'error');
-            nextSong();
-        });
+    window.playSongFromRow = function (el) {
+        buildPlaylistFromDOM(el);
+        const id = el?.dataset?.songId;
+        const idx = playlist.findIndex(s => String(s.id) === String(id));
+        if (idx !== -1) playSong(idx, true);
+        else {
+            const song = {
+                id: id, title: el?.dataset?.title, artist: el?.dataset?.artist,
+                audio: el?.dataset?.audio, image: el?.dataset?.image
+            };
+            if (song.audio) { playlist.unshift(song); playSong(0, true); }
+        }
     };
+    window.playSongFromCard = window.playSongFromRow;
 
-    // === CẬP NHẬT PLAYER ===
-    const updatePlayer = (song) => {
+    /* ================= PLAYER UI ================= */
+    function updatePlayer(song) {
         if (!song) return;
-        els.title.textContent = song.title;
-        els.artist.textContent = song.artist;
-
+        els.title && (els.title.textContent = song.title);
+        els.artist && (els.artist.textContent = song.artist);
         if (els.cover) {
             els.cover.src = song.image;
             els.cover.onerror = () => els.cover.src = '../assets/songs/images/default.jpg';
         }
+        syncFavoriteUI(song.id, song.isFavorite);
+        highlightCurrentSong();
+    }
 
-        if (els.favoriteBtn && song.id) {
-            els.favoriteBtn.dataset.songId = song.id;
-            const isFav = song.isFavorite;
+    function updatePlayPause(play) {
+        const icon = els.playPause?.querySelector('i');
+        if (icon) icon.className = play ? 'fas fa-pause' : 'fas fa-play';
+    }
+
+    function highlightCurrentSong() {
+        $$('.song-card, .song-row, .chart-item').forEach(el => {
+            el.classList.toggle('active', String(el.dataset.songId) === String(playlist[currentIndex]?.id));
+        });
+    }
+
+    /* ================= FAVORITE ================= */
+    function syncFavoriteUI(songId, isFav) {
+        document.querySelectorAll(`[data-song-id="${songId}"]`).forEach(el => {
+            el.dataset.isFavorite = isFav ? '1' : '0';
+            const icon = el.querySelector('.favorite-btn i, .btn-favorite i, .btn-like i');
+            if (icon) icon.className = isFav ? 'fas fa-heart text-danger' : 'far fa-heart';
+        });
+        if (els.favoriteBtn) {
+            els.favoriteBtn.dataset.songId = songId;
             els.favoriteBtn.classList.toggle('active', isFav);
             const icon = els.favoriteBtn.querySelector('i');
             if (icon) icon.className = isFav ? 'fas fa-heart text-danger' : 'far fa-heart';
         }
+    }
+
+    window.toggleFavorite = (btn, songId, ev) => {
+        try { ev?.stopPropagation(); } catch (e) { }
+        const sid = String(songId ?? btn?.dataset?.songId ?? '');
+        if (!sid) return;
+        fetch('../ajax/favorite_toggle.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'song_id=' + encodeURIComponent(sid)
+        }).then(r => r.json()).then(data => {
+            const added = data.action === 'added';
+            const song = playlist.find(s => String(s.id) === String(sid));
+            if (song) song.isFavorite = added;
+            syncFavoriteUI(sid, added);
+        }).catch(console.error);
     };
 
-    // === HIGHLIGHT BÀI ĐANG PHÁT ===
-    const highlightCurrentSong = () => {
-        $$('.song-card, .song-row').forEach((el, i) => {
-            el.classList.toggle('active', i === currentIndex);
-        });
-    };
-
-    // === CẬP NHẬT NÚT PLAY/PAUSE ===
-    const updatePlayPauseIcon = (playing) => {
-        const icon = els.playPause?.querySelector('i');
-        if (icon) icon.className = playing ? 'fas fa-pause' : 'fas fa-play';
-    };
-
-    // === ĐIỀU KHIỂN ===
-    els.playPause?.addEventListener('click', () => {
-        if (isPlaying) {
-            audio.pause();
-            isPlaying = false;
-        } else {
-            audio.play();
-            isPlaying = true;
+    /* ================= CONTROLS ================= */
+    els.playPause?.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (!playlist.length || currentIndex === -1 || !audio.src) {
+            buildPlaylistFromDOM();
+            if (playlist.length) playSong(0, true);
+            return;
         }
-        updatePlayPauseIcon(isPlaying);
+        if (isPlaying) { audio.pause(); isPlaying = false; }
+        else { audio.play(); isPlaying = true; }
+        updatePlayPause(isPlaying);
     });
 
-    const nextSong = () => {
-        let next = currentIndex + 1;
-        if (isShuffle) next = Math.floor(Math.random() * playlist.length);
-        else if (next >= playlist.length) next = isRepeat ? 0 : currentIndex;
-        playSong(next);
-    };
-
-    els.next?.addEventListener('click', nextSong);
-
-    els.prev?.addEventListener('click', () => {
-        let prev = currentIndex - 1;
-        if (prev < 0) prev = isRepeat ? playlist.length - 1 : currentIndex;
-        playSong(prev);
+    els.next?.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (!playlist.length) buildPlaylistFromDOM();
+        if (!playlist.length) return;
+        playSong((currentIndex + 1) % playlist.length, true);
     });
 
-    els.shuffle?.addEventListener('click', () => {
-        isShuffle = !isShuffle;
-        els.shuffle.classList.toggle('active', isShuffle);
-        showToast(isShuffle ? 'Đã bật chế độ ngẫu nhiên' : 'Đã tắt chế độ ngẫu nhiên', 'info');
+    els.prev?.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (!playlist.length) buildPlaylistFromDOM();
+        if (!playlist.length) return;
+        playSong((currentIndex - 1 + playlist.length) % playlist.length, true);
     });
 
     els.repeat?.addEventListener('click', () => {
         isRepeat = !isRepeat;
+        audio.loop = isRepeat;
         els.repeat.classList.toggle('active', isRepeat);
-        audio.loop = isRepeat && !isShuffle;
-        showToast(isRepeat ? 'Đã bật chế độ lặp lại' : 'Đã tắt chế độ lặp lại', 'info');
     });
 
-    // === PROGRESS BAR + VOLUME ===
+    function rebuildShuffleOrder() {
+        shuffleOrder = playlist.map((_, i) => i);
+        for (let i = shuffleOrder.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffleOrder[i], shuffleOrder[j]] = [shuffleOrder[j], shuffleOrder[i]];
+        }
+        shufflePos = shuffleOrder.indexOf(currentIndex);
+    }
+
+    els.shuffle?.addEventListener('click', () => {
+        isShuffle = !isShuffle;
+        els.shuffle.classList.toggle('active', isShuffle);
+        if (isShuffle) rebuildShuffleOrder();
+        else { shuffleOrder = []; shufflePos = -1; }
+    });
+
+    /* ================= PROGRESS & VIEW COUNT (FIXED) ================= */
     audio.addEventListener('timeupdate', () => {
+        // Update UI
         if (audio.duration) {
-            const percent = (audio.currentTime / audio.duration) * 100;
-            els.progressBar.style.width = percent + '%';
-            els.currentTime.textContent = formatTime(audio.currentTime);
-            els.duration.textContent = formatTime(audio.duration);
+            els.progress && (els.progress.style.width = (audio.currentTime / audio.duration) * 100 + '%');
+            els.currentTime && (els.currentTime.textContent = formatTime(audio.currentTime));
+            els.duration && (els.duration.textContent = formatTime(audio.duration));
+        }
+
+        // --- CORE VIEW COUNT LOGIC ---
+        // Điều kiện 1: Thời gian nghe phải lớn hơn ngưỡng (ví dụ 10s)
+        if (audio.currentTime > MIN_LISTEN_TIME) {
+            const song = playlist[currentIndex];
+            const currentId = song?.id ? String(song.id) : null;
+
+            if (currentId) {
+                // Điều kiện 2: Bài này chưa được đếm trong phiên nghe hiện tại
+                if (lastCountedSongId !== currentId) {
+                    
+                    const now = Date.now();
+                    const lastTime = lastIncrementedTime[currentId] || 0;
+
+                    // Điều kiện 3: Không spam quá nhanh (debounce 60s)
+                    if (now - lastTime >= INCREMENT_SKIP_WINDOW) {
+                        
+                        // ✅ ĐẠT ĐIỀU KIỆN TĂNG VIEW
+                        console.log(`[View Count] Tăng view cho bài ID: ${currentId}`);
+                        
+                        // 1. Lock ngay lập tức để không chạy lại lần 2
+                        lastCountedSongId = currentId; 
+                        lastIncrementedTime[currentId] = now;
+
+                        // 2. UI Update (Optimistic)
+                        document.querySelectorAll(`[data-song-id="${currentId}"] .play-count-badge`).forEach(el => {
+                            const num = parseInt(el.textContent.replace(/[^0-9]/g, '')) || 0;
+                            el.textContent = (num + 1).toLocaleString();
+                        });
+
+                        // 3. Send Server Request
+                        const params = new URLSearchParams();
+                        params.append('song_id', currentId);
+                        if (navigator.sendBeacon) {
+                            navigator.sendBeacon('../ajax/increment_play.php', params);
+                        } else {
+                            fetch('../ajax/increment_play.php', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: params,
+                                keepalive: true
+                            }).catch(() => {});
+                        }
+                    } else {
+                        // Đã đếm gần đây rồi -> đánh dấu đã xử lý để không check lại liên tục
+                        lastCountedSongId = currentId;
+                    }
+                }
+            }
         }
     });
 
     els.progressContainer?.addEventListener('click', e => {
-        if (!audio.duration) return;
         const rect = els.progressContainer.getBoundingClientRect();
-        const percent = (e.clientX - rect.left) / rect.width;
-        audio.currentTime = percent * audio.duration;
+        audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
     });
-
-    if (els.volume) {
-        els.volume.value = localStorage.getItem('volume') || 0.7;
-        audio.volume = els.volume.value;
-        els.volume.addEventListener('input', e => {
-            audio.volume = e.target.value;
-            localStorage.setItem('volume', e.target.value);
-        });
-    }
 
     audio.addEventListener('ended', () => {
-        if (isRepeat && !isShuffle) {
-            audio.currentTime = 0;
-            audio.play();
-        } else {
-            nextSong();
-        }
+        if (isRepeat) { playSong(currentIndex, true); return; }
+        playSong((currentIndex + 1) % playlist.length, true); // Tuần tự
     });
 
-    const formatTime = sec => {
-        if (isNaN(sec)) return '0:00';
+    /* ================= OTHER UTILS ================= */
+    function autoPlayFromDetail() {
+        const detail = document.querySelector('.song-detail[data-song-id]');
+        if (!detail) return;
+        buildPlaylistFromDOM(detail);
+        const idx = playlist.findIndex(s => s.id === detail.dataset.songId);
+        if (idx !== -1) playSong(idx, true);
+    }
+
+    function formatTime(sec) {
         const m = Math.floor(sec / 60);
         const s = Math.floor(sec % 60);
         return `${m}:${s < 10 ? '0' + s : s}`;
-    };
+    }
 
-    // === CLICK VÀO CARD/ROW ĐỂ PHÁT ===
+    /* DELEGATION */
     document.addEventListener('click', e => {
-        const card = e.target.closest('.song-card, .song-row');
+        if (e.target.closest('#musicPlayer, .play-pause-btn, .next-btn, .prev-btn, .favorite-btn, .btn-favorite')) return;
+        const card = e.target.closest('.song-card, .song-row, .chart-item');
         if (!card) return;
-        if (e.target.closest('.btn-favorite, .btn-add-to-album, .btn-remove-from-album, button, a, .dropdown')) return;
+        if (e.target.closest('a.song-card-link') && !e.target.closest('.play-overlay')) return;
 
-        const index = Array.from($$('.song-card, .song-row')).indexOf(card);
-        if (index !== -1) playSong(index);
+        e.preventDefault();
+        buildPlaylistFromDOM(card);
+        const idx = playlist.findIndex(s => s.id === card.dataset.songId);
+        if (idx !== -1) playSong(idx, true);
+    });
+    
+    // Play Overlay Click
+    document.addEventListener('click', e => {
+        const overlay = e.target.closest('.play-overlay');
+        if (!overlay) return;
+        e.preventDefault(); e.stopPropagation();
+        const card = overlay.closest('.song-card, .song-row');
+        if (card) {
+            buildPlaylistFromDOM(card);
+            const idx = playlist.findIndex(s => s.id === card.dataset.songId);
+            if (idx !== -1) playSong(idx, true);
+        }
     });
 
-    // === YÊU THÍCH ===
-    window.toggleFavorite = (btn, songId) => {
-        if (!songId) return;
-        e?.stopPropagation();
-
-        const icon = btn.querySelector('i');
-        const wasActive = btn.classList.contains('active');
-        icon.className = 'fas fa-spinner fa-spin text-primary';
-
-        fetch('../ajax/toggle_favorite.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'song_id=' + songId
-        })
-        .then(r => r.json())
-        .then(data => {
-            const isNowFav = data.status === 'added';
-
-            $$(`.btn-favorite[data-song-id="${songId}"]`).forEach(b => {
-                b.classList.toggle('active', isNowFav);
-                b.querySelector('i').className = isNowFav ? 'fas fa-heart text-danger' : 'far fa-heart';
-            });
-
-            const songInList = playlist.find(s => s.id == songId);
-            if (songInList) songInList.isFavorite = isNowFav;
-
-            if (currentIndex >= 0 && playlist[currentIndex]?.id == songId) {
-                updatePlayer(playlist[currentIndex]);
-            }
-
-            showToast(isNowFav ? 'Đã thêm vào yêu thích!' : 'Đã xóa khỏi yêu thích', isNowFav ? 'success' : 'info');
-        })
-        .catch(() => {
-            icon.className = wasActive ? 'fas fa-heart text-danger' : 'far fa-heart';
-            showToast('Lỗi kết nối!', 'error');
+    // Mobile Toggle
+    const mobileToggle = document.getElementById('mobileSidebarToggle');
+    if (mobileToggle) {
+        mobileToggle.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-visible');
         });
-    };
-
-    // === THÊM VÀO ALBUM ===
-    window.addToAlbum = (songId, albumId) => {
-        if (!songId || !albumId) return;
-
-        fetch('../ajax/add_to_album.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `song_id=${songId}&album_id=${albumId}`
-        })
-        .then(r => r.json())
-        .then(d => {
-            showToast(d.message, d.status === 'success' ? 'success' : d.status === 'exists' ? 'warning' : 'error');
-            if (d.status === 'success' || d.status === 'exists') {
-                bootstrap.Modal.getInstance('#addToAlbumModal')?.hide();
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#sidebar') && !e.target.closest('#mobileSidebarToggle')) {
+                document.body.classList.remove('sidebar-visible');
             }
-        })
-        .catch(() => showToast('Lỗi mạng!', 'error'));
-    };
-
-    // === XÓA KHỎI ALBUM ===
-    window.removeFromAlbum = (albumId, songId, element) => {
-        if (!confirm('Xóa bài hát này khỏi album?')) return;
-
-        fetch('../ajax/remove_from_album.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `album_id=${albumId}&song_id=${songId}`
-        })
-        .then(r => r.json())
-        .then(d => {
-            if (d.status === 'success') {
-                element.closest('.song-row')?.remove();
-                showToast('Đã xóa khỏi album!', 'success');
-                if (!$$('.song-row')[0]) {
-                    setTimeout(() => location.reload(), 800);
-                }
-            } else {
-                showToast(d.message || 'Lỗi!', 'error');
-            }
-        })
-        .catch(() => showToast('Lỗi kết nối!', 'error'));
-    };
-
-    // === PHÁT CẢ ALBUM ===
-    window.playEntireAlbum = () => {
-        if (playlist.length === 0) {
-            showToast('Album trống!', 'warning');
-            return;
-        }
-        playSong(0);
-        showToast('Đang phát toàn bộ album!', 'success');
-    };
-
-    // === TOAST SIÊU ĐẸP ===
-    window.showToast = (msg, type = 'success') => {
-        const toast = document.createElement('div');
-        toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : 'success'} border-0 position-fixed bottom-0 end-0 m-3 shadow-lg`;
-        toast.style.zIndex = '9999';
-        toast.innerHTML = `
-            <div class="d-flex">
-                <div class="toast-body fw-semibold">${msg}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-            </div>`;
-        document.body.appendChild(toast);
-        const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
-        bsToast.show();
-        setTimeout(() => toast.remove(), 3500);
-    };
-
-    // === KHỞI ĐỘNG ===
-    loadPlaylist();
-    document.body.style.opacity = '1';
-
-    // Tự động phát lại nếu có bài đang phát (khi reload trang)
-    if (currentIndex >= 0 && playlist[currentIndex]) {
-        updatePlayer(playlist[currentIndex]);
-        highlightCurrentSong();
+        });
     }
+
+    buildPlaylistFromDOM();
+    autoPlayFromDetail();
 })();

@@ -1,8 +1,8 @@
 <?php
-// views/favorites.php – SIÊU PHẨM TRANG YÊU THÍCH 2025 – ĐẸP NHẤT THẾ GIỚI!
+// views/favorites.php – FINAL COMPLETE VERSION 2025
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -10,7 +10,7 @@ require_once '../config/database.php';
 
 $user_id = (int)$_SESSION['user_id'];
 
-// LẤY DANH SÁCH YÊU THÍCH – ĐÃ TỐI ƯU HOÀN HẢO
+// 1. LẤY DANH SÁCH YÊU THÍCH TỪ DATABASE
 $stmt = $GLOBALS['db_conn']->prepare("
     SELECT s.*, f.created_at as favorited_at 
     FROM songs s 
@@ -29,105 +29,113 @@ include '../includes/sidebar.php';
 ?>
 
 <div class="main-content py-5">
-    <div class="container-fluid px-4">
-        <div class="text-center text-md-start mb-5">
-            <h1 class="text-gradient display-2 fw-bold mb-3 position-relative d-inline-block">
-                <i class="fas fa-heart text-danger me-4" 
-                 style="font-size: 6.5rem;
-                       background: linear-gradient(135deg, #ff6b6b, #e74c3c, #c0392b);
-                      -webkit-background-clip: text;
-                      -webkit-text-fill-color: transparent;
-                       background-clip: text;
-                       color: transparent;
-                       filter: drop-shadow(0 0 40px rgba(231,76,60,0.7))
-                       drop-shadow(0 0 80px rgba(231,76,60,0.4));
-                       text-shadow: 0 0 30px rgba(231,76,60,0.6);">
-                </i>
-                Bài hát yêu thích của bạn
-            </h1>
-            <p class="text-muted fs-3 opacity-90 mt-3">
-                Bạn đang có <span class="text-danger fw-bold"><?= count($favorites) ?></span> 
-                bản nhạc làm trái tim bạn rung động
-            </p>
-        </div>
-
-        <!-- CHƯA CÓ BÀI NÀO -->
-        <?php if (empty($favorites)): ?>
-            <div class="text-center py-5 my-5">
-                <i class="fas fa-heart-broken fa-10x text-muted mb-5 opacity-15"
-                   style="filter: drop-shadow(0 0 40px rgba(0,0,0,0.3));"></i>
-                <h2 class="text-muted fw-light mb-4">Trái tim bạn đang trống rỗng...</h2>
-                <p class="text-muted fs-4 mb-5">Hãy khám phá và thêm những bản nhạc làm bạn rung động!</p>
-                <a href="home.php" class="btn btn-primary btn-lg px-6 py-4 rounded-pill shadow-lg fs-4">
-                    <i class="fas fa-home me-3"></i> Về trang chủ tìm nhạc
-                </a>
+    <div class="container-fluid px-4 px-lg-5">
+        
+        <div class="d-flex flex-column flex-md-row align-items-end justify-content-between mb-5 gap-4 animate-fade-in">
+            <div class="d-flex align-items-end gap-4">
+                <div class="fav-header-icon shadow-lg">
+                    <i class="fas fa-heart"></i>
+                </div>
+                <div>
+                    <h6 class="text-uppercase text-muted fw-bold ls-2 mb-2">Playlist</h6>
+                    <h1 class="display-3 fw-bolder text-white mb-0" style="text-shadow: 0 0 30px rgba(231,76,60,0.3);">
+                        Bài hát yêu thích
+                    </h1>
+                    <p class="text-white-50 mt-2 fs-5 mb-0">
+                        <span class="text-white fw-bold"><?= count($favorites) ?></span> bài hát mà bạn yêu thương
+                    </p>
+                </div>
             </div>
 
-        <!-- CÓ BÀI HÁT YÊU THÍCH -->
+            <?php if (!empty($favorites)): ?>
+            <div class="d-flex gap-3">
+                <button class="btn btn-primary rounded-pill px-4 py-3 fw-bold shadow-lg d-flex align-items-center gap-2 hover-scale"
+                        onclick="playAllFavorites()">
+                    <i class="fas fa-play"></i> Nghe tất cả
+                </button>
+            </div>
+            <?php endif; ?>
+        </div>
+
+        <?php if (!empty($favorites)): ?>
+        <div class="mb-4 mw-600 position-relative">
+            <i class="fas fa-search position-absolute text-muted" style="left: 20px; top: 50%; transform: translateY(-50%);"></i>
+            <input type="text" id="favSearch" class="form-control form-control-lg rounded-pill bg-dark border-0 text-white ps-5" 
+                   placeholder="Tìm trong danh sách yêu thích..." 
+                   onkeyup="filterFavorites()">
+        </div>
+        <?php endif; ?>
+
+        <?php if (empty($favorites)): ?>
+            <div class="empty-state text-center py-5 my-5">
+                <div class="mb-4 position-relative d-inline-block">
+                    <div class="blob-heart"></div>
+                    <i class="fas fa-heart-broken fa-8x text-secondary position-relative z-1 opacity-50"></i>
+                </div>
+                <h2 class="text-white fw-light mb-3">Chưa có bài hát nào</h2>
+                <p class="text-muted fs-5 mb-4">Thả tim <i class="fas fa-heart text-danger"></i> vào bài hát bạn thích để lưu vào đây nhé!</p>
+                <a href="home.php" class="btn btn-outline-light rounded-pill px-5 py-2 fw-bold">Khám phá ngay</a>
+            </div>
         <?php else: ?>
-            <div class="song-grid">
+            <div class="song-grid" id="favoritesGrid">
                 <?php foreach ($favorites as $song): 
                     $audioFile = '../assets/songs/audio/' . htmlspecialchars(basename($song['audio_file']));
-                    $imageFile = !empty($song['image']) && $song['image'] !== 'default.jpg'
+                    $imageFile = !empty($song['image']) && file_exists('../assets/songs/images/' . basename($song['image']))
                         ? '../assets/songs/images/' . htmlspecialchars(basename($song['image']))
-                        : '../assets/songs/images/default.jpg';
+                        : '../assets/songs/images/default1.jpg';
                 ?>
-                    <div class="song-item">
+                    <div class="song-item" data-search-term="<?= strtolower(htmlspecialchars($song['title'] . ' ' . ($song['artist'] ?? ''))) ?>">
                         <div class="song-card"
                              data-song-id="<?= $song['id'] ?>"
                              data-title="<?= htmlspecialchars($song['title']) ?>"
                              data-artist="<?= htmlspecialchars($song['artist'] ?? 'Không rõ') ?>"
                              data-audio="<?= $audioFile ?>"
                              data-image="<?= $imageFile ?>"
-                             data-is-favorite="true">
+                             data-is-favorite="true"
+                             onclick="playSongFromCard(this)">
 
-                            <!-- Ảnh + hiệu ứng -->
-                            <div class="card-img-wrapper position-relative overflow-hidden rounded-4 shadow-lg">
-                                <img src="<?= $imageFile ?>"
-                                     class="song-img w-100 h-100"
+                            <div class="card-img-wrapper">
+                                <img src="<?= $imageFile ?>" 
+                                     class="song-img" 
                                      alt="<?= htmlspecialchars($song['title']) ?>"
-                                     onerror="this.src='../assets/songs/images/default.jpg'"
                                      loading="lazy">
-
-                                <!-- PLAY OVERLAY -->
+                                
                                 <div class="play-overlay">
-                                    <i class="fas fa-play-circle fa-5x"></i>
+                                    <i class="fas fa-play-circle fa-4x text-white"></i>
                                 </div>
 
-                                <!-- TRÁI TIM ĐỎ RỰC – LUÔN ACTIVE -->
                                 <button class="btn-favorite active"
                                         data-song-id="<?= $song['id'] ?>"
                                         onclick="event.stopPropagation(); toggleFavorite(this, <?= $song['id'] ?>)"
-                                        title="Xóa khỏi danh sách yêu thích">
+                                        title="Bỏ thích">
                                     <i class="fas fa-heart"></i>
-                                </button>
-
-                                <!-- DẤU + GÓC TRÁI DƯỚI -->
-                                <button class="btn-add-to-album"
-                                        data-song-id="<?= $song['id'] ?>"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#addToAlbumModal"
-                                        onclick="event.stopPropagation();"
-                                        title="Thêm vào album">
-                                    <i class="fas fa-plus"></i>
                                 </button>
                             </div>
 
-                            <!-- Thông tin -->
-                            <div class="p-4 text-center bg-gradient">
-                                <h6 class="fw-bold text-white mb-1 text-truncate">
-                                    <?= htmlspecialchars($song['title']) ?>
-                                </h6>
-                                <p class="small text-muted mb-0 text-truncate">
-                                    <?= htmlspecialchars($song['artist'] ?? 'Không rõ') ?>
-                                </p>
+                            <div class="p-3 text-center">
+                                <h6 class="fw-bold text-white mb-1 text-truncate"><?= htmlspecialchars($song['title']) ?></h6>
+                                <p class="small text-muted mb-0 text-truncate"><?= htmlspecialchars($song['artist'] ?? 'Unknown') ?></p>
                             </div>
                         </div>
                     </div>
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
+
     </div>
+</div>
+
+<div id="favoritesData" class="d-none">
+    <?= json_encode(array_map(function($s) {
+        return [
+            'id' => $s['id'],
+            'title' => $s['title'],
+            'artist' => $s['artist'] ?? 'Unknown',
+            'audio' => '../assets/songs/audio/' . basename($s['audio_file']),
+            'image' => !empty($s['image']) ? '../assets/songs/images/' . basename($s['image']) : '../assets/songs/images/default1.jpg',
+            'isFavorite' => true
+        ];
+    }, $favorites)); ?>
 </div>
 
 <?php 
@@ -139,114 +147,150 @@ include '../includes/add_to_album_modal.php';
 <link rel="stylesheet" href="../assets/css/style.css">
 <script src="../assets/js/script.js"></script>
 
-<!-- CSS HOÀN HẢO – ĐỒNG BỘ 100% VỚI HOME, SEARCH, ALBUM -->
-<style>
-@keyframes heartbeat {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.15); }
+<script>
+// Filter danh sách yêu thích
+function filterFavorites() {
+    const input = document.getElementById('favSearch');
+    const filter = input.value.toLowerCase();
+    const items = document.querySelectorAll('.song-item');
+
+    items.forEach(item => {
+        const term = item.getAttribute('data-search-term');
+        if (term.includes(filter)) {
+            item.style.display = "";
+        } else {
+            item.style.display = "none";
+        }
+    });
 }
 
+// Chức năng Play All
+function playAllFavorites() {
+    try {
+        const dataDiv = document.getElementById('favoritesData');
+        if (!dataDiv) return;
+        
+        const songs = JSON.parse(dataDiv.textContent);
+        if (songs && songs.length > 0) {
+            window.playlist = songs;
+            window.playSong(0, true);
+        }
+    } catch (e) {
+        console.error("Lỗi khi phát tất cả:", e);
+    }
+}
+</script>
+
+<style>
+/* --- HEADER --- */
+.fav-header-icon {
+    width: 100px; height: 100px;
+    background: linear-gradient(135deg, #ff6b6b, #e74c3c);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3.5rem; color: white;
+    transform: rotate(-5deg);
+}
+
+.blob-heart {
+    position: absolute; top: 50%; left: 50%;
+    width: 150px; height: 150px;
+    background: radial-gradient(circle, rgba(231,76,60,0.4) 0%, rgba(231,76,60,0) 70%);
+    transform: translate(-50%, -50%);
+    animation: pulse 3s infinite;
+}
+
+/* --- LAYOUT GRID --- */
 .song-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 2rem;
-    padding: 2rem 1rem;
-    justify-items: center;
+    gap: 24px;
+    padding-bottom: 50px;
 }
-.song-item { width: 100%; max-width: 260px; }
 
 .song-card {
-    background: rgba(20,20,40,0.95);
-    border-radius: 20px;
+    background: rgba(24, 24, 24, 0.6);
+    border-radius: 12px;
     overflow: hidden;
     cursor: pointer;
-    border: 2px solid transparent;
-    transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: background-color 0.3s ease, transform 0.3s ease;
+    border: 1px solid transparent;
+}
+.song-card:hover {
+    background: rgba(40, 40, 40, 1);
+    transform: translateY(-8px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.card-img-wrapper {
     position: relative;
-    backdrop-filter: blur(10px);
+    width: 100%;
+    aspect-ratio: 1/1;
+    overflow: hidden;
+    border-radius: 8px;
+    margin: 12px 12px 0 12px;
+    width: calc(100% - 24px); 
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
 }
 
-.card-img-wrapper { 
-    position: relative; 
-    height: 260px; 
-    overflow: hidden; 
+.song-img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
 }
-.song-img { 
-    width: 100%; height: 100%; 
-    object-fit: cover; 
-    transition: transform 0.8s ease; 
-}
+.song-card:hover .song-img { transform: scale(1.08); }
 
+/* Play Overlay (Center) */
 .play-overlay {
     position: absolute; inset: 0;
-    background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.95));
+    background: rgba(0,0,0,0.4);
     display: flex; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 0.5s ease;
+    opacity: 0; transition: opacity 0.3s ease;
+    backdrop-filter: blur(2px);
 }
-.play-overlay i { 
-    color: white; 
-    filter: drop-shadow(0 0 30px black); 
-    transform: translateY(20px); 
-    transition: all 0.5s; 
-}
-
+.play-overlay i { transform: scale(0.8); transition: transform 0.3s; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
 .song-card:hover .play-overlay { opacity: 1; }
-.song-card:hover .play-overlay i { transform: translateY(0); }
-.song-card:hover .song-img { transform: scale(1.25); }
-.song-card:hover {
-    transform: translateY(-20px) scale(1.05);
-    border-color: #00D4FF;
-    box-shadow: 0 40px 100px rgba(0,212,255,0.7);
-}
+.song-card:hover .play-overlay i { transform: scale(1); }
 
-/* TRÁI TIM ĐỎ – SIÊU ĐỈNH */
+
+/* --- BUTTONS POSITIONING --- */
 .btn-favorite {
-    position: absolute; top: 12px; right: 12px;
-    background: rgba(0,0,0,0.7);
-    border: none; border-radius: 50%;
-    width: 52px; height: 52px;
-    color: white; font-size: 1.5rem;
-    z-index: 10;
-    transition: all 0.4s ease;
+    position: absolute;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
     display: flex; align-items: center; justify-content: center;
-}
-.btn-favorite.active {
-    background: #e74c3c;
-    transform: scale(1.2);
-    box-shadow: 0 0 30px rgba(231,76,60,0.9);
-}
-.btn-favorite:hover {
-    background: #c0392b;
-    transform: scale(1.3);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 10;
+    opacity: 0;
 }
 
-/* DẤU + GÓC TRÁI DƯỚI */
-.btn-add-to-album {
-    position: absolute; bottom: 12px; left: 12px;
-    background: rgba(0,0,0,0.8);
-    border: none; border-radius: 50%;
-    width: 56px; height: 56px;
-    color: white; font-size: 1.9rem;
-    z-index: 10;
-    opacity: 0; transform: scale(0.8);
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(12px);
+/* GÓC TRÊN - PHẢI (Tim) */
+.btn-favorite { 
+    top: 10px; right: 10px; 
+    background: rgba(0,0,0,0.6); 
+    color: #e74c3c; 
+    font-size: 1.1rem;
+    transform: translateY(-10px);
 }
-.song-card:hover .btn-add-to-album {
-    opacity: 1; transform: scale(1);
+
+
+/* Hover Effects */
+.song-card:hover .btn-favorite, 
+.song-card:hover .btn-add-to-album { 
+    opacity: 1; transform: translateY(0); 
 }
-.btn-add-to-album:hover {
-    background: #00D4FF;
-    transform: scale(1.3);
-    box-shadow: 0 0 50px rgba(0,212,255,0.9);
-}
+
+.btn-favorite:hover { background: #e74c3c; color: white; transform: scale(1.15) !important; }
+
+/* Input Search */
+#favSearch::placeholder { color: rgba(255,255,255,0.4); }
+#favSearch:focus { box-shadow: 0 0 0 2px rgba(231,76,60,0.5); background: #222 !important; }
 
 /* Responsive */
-@media (max-width: 1200px) { .song-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); } }
-@media (max-width: 992px)  { .song-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); } }
-@media (max-width: 768px)  { .song-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1.5rem; } }
-@media (max-width: 576px)  { 
-    .song-grid { grid-template-columns: repeat(2, 1fr); gap: 1.2rem; padding: 1rem; }
+@media (max-width: 576px) {
+    .song-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .display-3 { font-size: 2.5rem; }
+    .fav-header-icon { width: 60px; height: 60px; font-size: 2rem; }
 }
 </style>

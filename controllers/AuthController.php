@@ -27,8 +27,10 @@ class AuthController {
         }
 
         $stored = $userData['password'] ?? '';
+        // Xử lý avatar mặc định nếu null
+        $avatar = !empty($userData['avatar']) ? $userData['avatar'] : 'avatar.jpg';
 
-        // Nếu là hash và đúng
+        // 1. Trường hợp mật khẩu là HASH (Bảo mật)
         if (!empty($stored) && password_verify($password, $stored)) {
             if (password_needs_rehash($stored, PASSWORD_DEFAULT)) {
                 $newHash = password_hash($password, PASSWORD_DEFAULT);
@@ -42,13 +44,15 @@ class AuthController {
                     'id'       => $userData['id'],
                     'username' => $userData['username'],
                     'email'    => $userData['email'] ?? '',
-                    'role'     => $userData['role'] ?? 'user'
+                    'role'     => $userData['role'] ?? 'user',
+                    'avatar'   => $avatar // <--- QUAN TRỌNG: Trả về avatar
                 ]
             ];
         }
 
-        // Nếu là mật khẩu legacy (plaintext)
+        // 2. Trường hợp mật khẩu là Plaintext (Cũ - Legacy)
         if ($stored === $password) {
+            // Tự động cập nhật lên Hash để bảo mật cho lần sau
             $newHash = password_hash($password, PASSWORD_DEFAULT);
             if (method_exists($this->user, 'updatePassword')) {
                 $this->user->updatePassword($userData['id'], $newHash);
@@ -59,7 +63,8 @@ class AuthController {
                     'id'       => $userData['id'],
                     'username' => $userData['username'],
                     'email'    => $userData['email'] ?? '',
-                    'role'     => $userData['role'] ?? 'user'
+                    'role'     => $userData['role'] ?? 'user',
+                    'avatar'   => $avatar // <--- QUAN TRỌNG: Trả về avatar
                 ]
             ];
         }
@@ -81,7 +86,7 @@ class AuthController {
         // Mã hóa mật khẩu
         $hashed = password_hash($password, PASSWORD_DEFAULT);
 
-        // Thêm user mới
+        // Thêm user mới (Mặc định avatar là avatar.jpg trong Model hoặc DB)
         $userId = $this->user->create($username, $email, $hashed);
 
         if ($userId) {
@@ -91,7 +96,8 @@ class AuthController {
                     'id'       => $userId,
                     'username' => $username,
                     'email'    => $email,
-                    'role'     => 'user'
+                    'role'     => 'user',
+                    'avatar'   => 'avatar.jpg'
                 ]
             ];
         } else {
@@ -100,44 +106,55 @@ class AuthController {
     }
 }
 
-// If this file is accessed directly (e.g. form posts to controllers/AuthController.php?action=...),
-// handle the action. When included by other files, this block will not execute.
+// XỬ LÝ KHI GỌI TRỰC TIẾP (FORM POST)
 if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
-    session_start();
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    
     $action = $_GET['action'] ?? $_POST['action'] ?? '';
     $ctrl = new AuthController();
 
+    // --- XỬ LÝ ĐĂNG NHẬP ---
     if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
+        
         $res = $ctrl->login($username, $password);
+        
         if ($res['success']) {
+            // Lưu thông tin vào Session
             $_SESSION['user_id'] = $res['user']['id'];
             $_SESSION['username'] = $res['user']['username'];
             $_SESSION['role'] = $res['user']['role'] ?? 'user';
+            
+            // QUAN TRỌNG: Lưu avatar vào session để Sidebar hiển thị
+            $_SESSION['avatar'] = $res['user']['avatar']; 
+
             header('Location: ../views/home.php');
             exit;
         } else {
-            // send back to login with a simple error via query param
+            // Thất bại -> Quay về login kèm lỗi
             header('Location: ../login.php?error=' . urlencode($res['message'] ?? 'Đăng nhập thất bại'));
             exit;
         }
     }
 
+    // --- XỬ LÝ ĐĂNG KÝ ---
     if ($action === 'register' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim($_POST['username'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $confirm = $_POST['confirm'] ?? '';
+
         if ($password !== $confirm) {
             header('Location: ../register.php?error=' . urlencode('Mật khẩu không khớp'));
             exit;
         }
+
         $res = $ctrl->register($username, $email, $password);
+
         if ($res['success']) {
-            $_SESSION['user_id'] = $res['user']['id'];
-            $_SESSION['username'] = $res['user']['username'];
-            header('Location: ../views/home.php');
+            // Đăng ký xong -> Chuyển về Login
+            header('Location: ../login.php?success=' . urlencode('Đăng ký thành công. Vui lòng đăng nhập.'));
             exit;
         } else {
             header('Location: ../register.php?error=' . urlencode($res['message'] ?? 'Đăng ký thất bại'));

@@ -1,12 +1,17 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// includes/auth.php
 
-// Hàm kiểm tra quyền – siêu ngắn gọn, an toàn
-function check_role(array $allowed_roles) {
-    if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], $allowed_roles)) {
-        header("Location: login.php");
+// Hàm kiểm tra quyền truy cập
+function check_role($allowed_roles) {
+    // Nếu chưa đăng nhập -> Đá về login
+    if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
+        header('Location: ../login.php');
+        exit;
+    }
+
+    // Nếu role hiện tại không nằm trong danh sách cho phép -> Báo lỗi hoặc đá về trang chủ
+    if (!in_array($_SESSION['role'], $allowed_roles)) {
+        echo "<script>alert('Bạn không có quyền truy cập trang này!'); window.location.href='../views/home.php';</script>";
         exit;
     }
 }

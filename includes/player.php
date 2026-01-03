@@ -3,7 +3,7 @@
     <!-- TRÁI: Ảnh bìa + Tên bài + Yêu thích -->
     <div class="player-left">
         <div class="player-cover">
-            <img src="../assets/songs/images/default.jpg" alt="Cover" id="playerCover">
+            <img src="../assets/songs/images/default1.jpg" alt="Cover" id="playerCover">
         </div>
         <div class="player-info">
             <div class="player-song-title fw-bold" id="playerTitle">Chưa phát nhạc</div>

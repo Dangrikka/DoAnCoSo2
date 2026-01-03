@@ -29,6 +29,7 @@ if (isset($_GET['delete'])) {
 
 // Lấy danh sách bài hát cho admin
 $songs = $songCtrl->getAllAdmin();
+include '../includes/header.php';
 ?>
 
 <!DOCTYPE html>
@@ -36,7 +37,7 @@ $songs = $songCtrl->getAllAdmin();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin • Quản lý bài hát - MusicVN</title>
+    <title>Admin • Quản lý bài hát</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Poppins:wght@700;900&display=swap" rel="stylesheet">
@@ -78,6 +79,15 @@ $songs = $songCtrl->getAllAdmin();
             transition: all 0.4s;
             margin: 0 8px;
         }
+        
+        /* CSS CHO NÚT HOME MỚI THÊM */
+        .btn-home {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 10px 30px rgba(118, 75, 162, 0.4);
+        }
+        .btn-home:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(118, 75, 162, 0.6); }
+
         .btn-add {
             background: linear-gradient(135deg, var(--primary), #9D4EDD);
             color: white;
@@ -134,6 +144,7 @@ $songs = $songCtrl->getAllAdmin();
             from { opacity:0; transform:translateY(-20px); }
             to   { opacity:1; transform:none; }
         }
+        
     </style>
 </head>
 <body>
@@ -141,6 +152,11 @@ $songs = $songCtrl->getAllAdmin();
 <div class="container">
     <div class="header">
         <h1 class="text-gradient">QUẢN LÝ BÀI HÁT</h1>
+        
+        <a href="../views/home.php" class="btn btn-home">
+            <i class="fas fa-home"></i> TRANG CHỦ
+        </a>
+
         <a href="upload.php" class="btn btn-add">
             <i class="fas fa-plus-circle"></i> THÊM BÀI HÁT MỚI
         </a>
@@ -174,8 +190,9 @@ $songs = $songCtrl->getAllAdmin();
                 <tr>
                     <td><?= $stt++ ?></td>
                     <td>
-                        <img src="../assets/songs/images/<?= htmlspecialchars($s['image_url'] ?? 'default.jpg') ?>" 
-                             alt="cover" class="cover" onerror="this.src='../assets/songs/images/default.jpg'">
+                        <img src="../assets/songs/images/<?php echo htmlspecialchars($s['image']); ?>" 
+                                alt="Cover" class="cover"
+                                onerror="this.src='../assets/songs/images/default.jpg'">
                     </td>
                     <td><strong><?= htmlspecialchars($s['title']) ?></strong></td>
                     <td><?= htmlspecialchars($s['artist']) ?></td>

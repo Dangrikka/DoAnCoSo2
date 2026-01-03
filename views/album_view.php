@@ -23,12 +23,12 @@ if (!$album) {
 
 $songs = $albumCtrl->getSongsInAlbum($album_id);
 $coverImg = !empty($album['cover_image']) 
-    ? '../assets/songs/images/' . basename($album['cover_image']) 
+    ? '../assets/albums/' . basename($album['cover_image']) 
     : '../assets/songs/images/default.jpg';
 
 include __DIR__ . '/../includes/header.php';
 include __DIR__ . '/../includes/sidebar.php';
-?>
+?> 
 
 <div class="main-content py-5">
     <div class="container-fluid px-4">
@@ -63,19 +63,25 @@ include __DIR__ . '/../includes/sidebar.php';
             </div>
         </div>
 
-        <!-- NÚT PLAY + THÊM BÀI -->
-        <div class="mb-5 d-flex flex-wrap gap-4 align-items-center">
-            <button class="btn-play-big shadow-lg" onclick="playAlbum(<?= $album_id ?>)">
-                <i class="fas fa-play"></i>
-            </button>
-            <button class="btn btn-outline-primary px-5 py-3 rounded-pill fs-5 d-flex align-items-center gap-2"
-                    data-bs-toggle="modal" data-bs-target="#addToAlbumModal">
-                <i class="fas fa-plus"></i> Thêm bài hát
-            </button>
-            <div class="ms-auto">
-                <small class="text-muted">Tạo ngày <?= date('d/m/Y', strtotime($album['created_at'])) ?></small>
-            </div>
-        </div>
+<!-- NÚT PLAY + THÊM BÀI -->
+<div class="mb-5 d-flex flex-wrap gap-4 align-items-center">
+    <!-- gọi playAlbum với album id (hàm sẽ nhận tham số) -->
+    <button class="btn-play-big shadow-lg" onclick="playAlbum(<?= $album_id ?>)">
+        <i class="fas fa-play"></i>
+    </button>
+
+    <!-- truyền album-id vào button để modal biết -->
+    <a href="album_add_songs.php?id=<?= $album_id ?>" 
+   class="btn btn-outline-primary px-5 py-3 rounded-pill fs-5 d-flex align-items-center gap-2">
+    <i class="fas fa-plus"></i> Thêm bài hát
+    </a>
+
+
+    <div class="ms-auto">
+        <small class="text-muted">Tạo ngày <?= isset($album['created_at']) ? date('d/m/Y', strtotime($album['created_at'])) : '—' ?></small>
+    </div>
+</div>
+
 
         <!-- DANH SÁCH BÀI HÁT -->
         <div id="albumSongsContainer">
@@ -95,7 +101,7 @@ include __DIR__ . '/../includes/sidebar.php';
                                 $audio = '../assets/songs/audio/' . htmlspecialchars($song['audio_file']);
                                 $img   = !empty($song['image']) 
                                     ? '../assets/songs/images/' . basename($song['image']) 
-                                    : '../assets/songs/images/default.jpg';
+                                    : '../assets/songs/images/default1.jpg';
                             ?>
                                 <tr class="song-row align-middle border-bottom border-dark" 
                                     style="cursor:pointer;transition:all 0.3s;"
@@ -175,22 +181,39 @@ include __DIR__ . '/../includes/footer.php';
 
 <script>
 // PHÁT TOÀN BỘ ALBUM
-function playAlbum() {
+function playAlbum(albumId) {
+    // 1. Lấy tất cả các dòng bài hát đang hiển thị
     const rows = document.querySelectorAll('.song-row');
-    if (rows.length === 0) return;
 
+    // 2. Kiểm tra nếu album trống
+    if (rows.length === 0) {
+        alert("Album này chưa có bài hát nào để phát!");
+        return;
+    }
+
+    // 3. Tạo playlist từ dữ liệu data- attribute của các dòng HTML
+    // Lưu ý: Đảm bảo các thuộc tính data-audio, data-image,... đã được in đúng trong vòng lặp PHP
     window.playlist = Array.from(rows).map(row => ({
-        id: row.dataset.songId,
-        title: row.dataset.title,
-        artist: row.dataset.artist,
-        audio: row.dataset.audio,
-        image: row.dataset.image
+        id: row.getAttribute('data-song-id'),
+        title: row.getAttribute('data-title'),
+        artist: row.getAttribute('data-artist'),
+        audio: row.getAttribute('data-audio'),
+        image: row.getAttribute('data-image')
     }));
+
+    // 4. Reset index về bài đầu tiên và phát
     window.currentIndex = 0;
-    playSong(0);
+    
+    // Gọi hàm playSong (Hàm này thường nằm trong file player.php hoặc script.js chính của bạn)
+    if (typeof playSong === 'function') {
+        playSong(0); // Phát bài ở vị trí 0 trong playlist
+        console.log("Đang phát album với " + window.playlist.length + " bài hát.");
+    } else {
+        console.error("Lỗi: Không tìm thấy hàm playSong(). Kiểm tra file player.php");
+    }
 }
 
-// XÓA BÀI HÁT KHỎI ALBUM – TỰ ĐỘNG CẬP NHẬT DB + GIAO DIỆN (KHÔNG RELOAD!)
+// --- LOGIC XÓA BÀI HÁT (GIỮ NGUYÊN NHƯ CŨ) ---
 function removeFromAlbum(albumId, songId, rowElement) {
     if (!confirm('Xóa bài hát này khỏi album?')) return;
 
@@ -202,34 +225,40 @@ function removeFromAlbum(albumId, songId, rowElement) {
     .then(r => r.json())
     .then(data => {
         if (data.status === 'success') {
-            rowElement.remove();
+            // Hiệu ứng mờ dần trước khi xóa
+            rowElement.style.transition = "all 0.5s ease";
+            rowElement.style.opacity = "0";
             
-            // Cập nhật số bài hát
-            const countEl = document.getElementById('songCount');
-            let count = parseInt(countEl.textContent);
-            countEl.textContent = count - 1;
+            setTimeout(() => {
+                rowElement.remove();
+                
+                // Cập nhật số lượng bài hát hiển thị trên Header
+                const countEl = document.getElementById('songCount');
+                if(countEl) {
+                    let count = parseInt(countEl.textContent);
+                    countEl.textContent = Math.max(0, count - 1);
+                }
 
-            // Cập nhật số thứ tự
-            document.querySelectorAll('#albumSongsList tr').forEach((tr, i) => {
-                tr.querySelector('td:first-child').textContent = i + 1;
-            });
+                // Cập nhật lại số thứ tự (Cột #)
+                document.querySelectorAll('#albumSongsList tr').forEach((tr, i) => {
+                    tr.querySelector('td:first-child').textContent = i + 1;
+                });
 
-            // Nếu không còn bài nào → hiện thông báo trống
-            if (document.querySelectorAll('#albumSongsList tr').length === 0) {
-                document.getElementById('albumSongsContainer').innerHTML = `
-                    <div class="text-center py-5 my-5">
-                        <i class="fas fa-compact-disc fa-8x text-muted mb-4 opacity-20"></i>
-                        <h2 class="text-muted fw-light">Album này chưa có bài hát nào</h2>
-                        <p class="text-muted mb-4">Hãy thêm những bản nhạc yêu thích của bạn!</p>
-                        <button class="btn btn-primary btn-lg px-5 py-3 rounded-pill" 
-                                data-bs-toggle="modal" data-bs-target="#addToAlbumModal">
-                            Thêm bài hát ngay
-                        </button>
-                    </div>
-                `;
-            }
-
-            alert('Đã xóa bài hát khỏi album!');
+                // Nếu xóa hết thì hiện giao diện trống
+                if (document.querySelectorAll('#albumSongsList tr').length === 0) {
+                    document.getElementById('albumSongsContainer').innerHTML = `
+                        <div class="text-center py-5 my-5">
+                            <i class="fas fa-compact-disc fa-8x text-muted mb-4 opacity-20"></i>
+                            <h2 class="text-muted fw-light">Album này chưa có bài hát nào</h2>
+                            <button class="btn btn-primary btn-lg px-5 py-3 rounded-pill mt-3" 
+                                    onclick="window.location.href='album_add_songs.php?id=${albumId}'">
+                                Thêm bài hát ngay
+                            </button>
+                        </div>
+                    `;
+                }
+            }, 500); // Đợi 0.5s cho hiệu ứng xong
+            
         } else {
             alert('Lỗi: ' + (data.message || 'Không thể xóa'));
         }

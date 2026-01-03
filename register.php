@@ -1,7 +1,5 @@
 <?php
-// register.php – ĐÃ SỬA HOÀN HẢO, ĐẸP NHƯ SPOTIFY 2025
-
-// Nếu đã đăng nhập → tự động về trang chủ
+// register.php – FINAL FIXED VERSION 2025
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -10,19 +8,16 @@ if (isset($_SESSION['user_id'])) {
     exit;
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đăng ký • MusicVN</title>
+    <title>Đăng ký • ĐR</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
-
+    
     <style>
         :root {
             --primary: #00D4FF;
@@ -39,28 +34,20 @@ if (isset($_SESSION['user_id'])) {
             position: relative;
         }
 
-        /* Hiệu ứng nền động */
+        /* --- BACKGROUND ANIMATION --- */
         .area {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at 50% 50%, rgba(0,212,255,0.1), transparent 70%);
-            pointer-events: none;
-            z-index: 0;
+            pointer-events: none; z-index: 0;
         }
         .circles {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            overflow: hidden;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden;
         }
         .circles li {
-            position: absolute;
-            display: block;
-            list-style: none;
-            width: 20px; height: 20px;
-            background: rgba(0,212,255,0.2);
+            position: absolute; display: block; list-style: none;
+            width: 20px; height: 20px; background: rgba(0,212,255,0.2);
             animation: animate 25s linear infinite;
-            bottom: -150px;
-            border-radius: 50%;
+            bottom: -150px; border-radius: 50%;
         }
         .circles li:nth-child(1)  { left: 25%; width: 80px; height: 80px; animation-delay: 0s; }
         .circles li:nth-child(2)  { left: 10%; width: 20px; height: 20px; animation-delay: 2s; animation-duration: 12s; }
@@ -78,69 +65,97 @@ if (isset($_SESSION['user_id'])) {
             100% { transform: translateY(-1000px) rotate(720deg); opacity: 0; border-radius: 50%; }
         }
 
+        /* --- LOGIN BOX (GLASSMORPHISM) --- */
         .login-box {
-            background: rgba(20,20,40,0.95);
+            background: rgba(20,20,40,0.85);
             padding: 50px 40px;
             border-radius: 28px;
             box-shadow: 0 30px 80px rgba(0,212,255,0.4);
-            border: 1px solid rgba(0,212,255,0.3);
-            backdrop-filter: blur(16px);
-            max-width: 480px;
-            width: 100%;
-            z-index: 10;
-            position: relative;
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            max-width: 480px; width: 100%;
+            z-index: 10; position: relative;
+            transition: transform 0.3s ease;
         }
-        .logo {
-            font-family: 'Poppins', sans-serif;
-            font-size: 4rem;
-            font-weight: 900;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .login-box:hover { transform: translateY(-5px); }
+
+        /* --- LOGO IMAGE STYLE --- */
+        .logo-login-img {
+            width: 100px; 
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            animation: floatLogo 3s ease-in-out infinite;
             margin-bottom: 10px;
         }
+
+        @keyframes floatLogo {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
         .text-gradient {
-            font-size: 2.2rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #00D4FF, #9D4EDD);
+            font-size: 1.8rem; 
+            font-weight: 700; 
+            text-align: center;
+            background: linear-gradient(135deg, #ffffff, #aaaaaa);
             -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
             background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+            display: inline-block;
+            width: 100%;
+        }
+
+        /* --- FORM CONTROLS --- */
+        .input-group-custom { position: relative; margin-bottom: 20px; }
+        .input-group-custom i {
+            position: absolute; top: 50%; left: 20px; transform: translateY(-50%);
+            color: #aaa; z-index: 2; transition: 0.3s;
         }
         .form-control {
-            background: rgba(40,40,70,0.9);
-            border: 1px solid #555;
-            border-radius: 16px;
-            padding: 16px 20px;
-            color: white;
-            font-size: 1.1rem;
-            margin-bottom: 20px;
-            transition: all 0.4s;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50px;
+            padding: 16px 20px 16px 50px; /* Padding left để chừa chỗ cho icon */
+            color: white; font-size: 1rem;
+            transition: all 0.3s ease;
         }
         .form-control:focus {
+            background: rgba(255,255,255,0.1);
             border-color: var(--primary);
-            box-shadow: 0 0 25px rgba(0,212,255,0.5);
-            outline: none;
+            box-shadow: 0 0 20px rgba(0,212,255,0.3);
+            color: white;
         }
+        .form-control:focus + i { color: var(--primary); }
+        .form-control::placeholder { color: rgba(255,255,255,0.4); }
+
+        /* Eye Toggle */
+        .toggle-password {
+            position: absolute; top: 50%; right: 20px; transform: translateY(-50%);
+            color: #aaa; cursor: pointer; z-index: 3;
+        }
+        .toggle-password:hover { color: white; }
+
+        /* --- BUTTONS --- */
         .btn-login {
             background: linear-gradient(135deg, var(--primary), var(--secondary));
-            color: white;
-            padding: 18px;
-            border: none;
-            border-radius: 50px;
-            font-size: 1.4rem;
-            font-weight: 800;
-            width: 100%;
-            transition: all 0.5s;
-            box-shadow: 0 15px 40px rgba(0,212,255,0.5);
+            color: white; padding: 16px; border: none; border-radius: 50px;
+            font-size: 1.2rem; font-weight: 800; width: 100%;
+            transition: all 0.4s ease;
+            box-shadow: 0 10px 30px rgba(0,212,255,0.3);
+            text-transform: uppercase; letter-spacing: 1px;
         }
         .btn-login:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 25px 60px rgba(0,212,255,0.7);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 50px rgba(0,212,255,0.6);
+            background: linear-gradient(135deg, var(--secondary), var(--primary));
         }
-        a { color: var(--primary); text-decoration: none; font-weight: 600; }
-        a:hover { text-decoration: underline; }
+
+        a { color: var(--primary); text-decoration: none; font-weight: 600; transition: 0.3s; }
+        a:hover { color: white; text-decoration: none; text-shadow: 0 0 10px var(--primary); }
     </style>
 </head>
 <body>
@@ -153,26 +168,65 @@ if (isset($_SESSION['user_id'])) {
 </div>
 
 <div class="d-flex align-items-center justify-content-center min-vh-100">
-    <div class="login-box">
-        <h3 class="text-gradient mb-4">Tạo tài khoản miễn phí</h3>
+    <div class="login-box animate-fade-in">
+        
+        <div class="text-center mb-4">
+            <img src="assets/songs/images/logo.jpg" alt="ĐR" class="logo-login-img">
+        </div>
+
+        <h3 class="text-gradient mb-4">Tạo tài khoản mới</h3>
 
         <form action="controllers/AuthController.php?action=register" method="POST" class="mt-4">
-            <input type="text" name="username" class="form-control" placeholder="Tên đăng nhập" required>
-            <input type="email" name="email" class="form-control" placeholder="Email của bạn" required>
-            <input type="password" name="password" class="form-control" placeholder="Mật khẩu (tối thiểu 6 ký tự)" required minlength="6">
-            <input type="password" name="confirm" class="form-control" placeholder="Nhập lại mật khẩu" required minlength="6">
+            
+            <div class="input-group-custom">
+                <i class="fas fa-user"></i>
+                <input type="text" name="username" class="form-control" placeholder="Tên đăng nhập" required autocomplete="username">
+            </div>
+
+            <div class="input-group-custom">
+                <i class="fas fa-envelope"></i>
+                <input type="email" name="email" class="form-control" placeholder="Email của bạn" required autocomplete="email">
+            </div>
+
+            <div class="input-group-custom">
+                <i class="fas fa-lock"></i>
+                <input type="password" name="password" id="password" class="form-control" placeholder="Mật khẩu (tối thiểu 6 ký tự)" required minlength="6" autocomplete="new-password">
+                <i class="fas fa-eye toggle-password" onclick="togglePassword('password', this)" style="left: auto; right: 20px;"></i>
+            </div>
+
+            <div class="input-group-custom">
+                <i class="fas fa-lock"></i>
+                <input type="password" name="confirm" id="confirm" class="form-control" placeholder="Nhập lại mật khẩu" required minlength="6" autocomplete="new-password">
+                <i class="fas fa-eye toggle-password" onclick="togglePassword('confirm', this)" style="left: auto; right: 20px;"></i>
+            </div>
 
             <button type="submit" class="btn-login mt-4">
-                <i class="fas fa-user-plus"></i> ĐĂNG KÝ NGAY
+                Đăng ký ngay <i class="fas fa-arrow-right ms-2"></i>
             </button>
         </form>
 
-        <p class="mt-4 text-muted">
+        <p class="mt-4 text-center text-white-50">
             Đã có tài khoản? 
-            <a href="login.php">Đăng nhập ngay</a>
+            <a href="login.php">Đăng nhập</a>
         </p>
     </div>
 </div>
+
+<script>
+    // Script ẩn/hiện mật khẩu
+    function togglePassword(inputId, icon) {
+        const input = document.getElementById(inputId);
+        if (input.type === "password") {
+            input.type = "text";
+            icon.classList.remove("fa-eye");
+            icon.classList.add("fa-eye-slash");
+        } else {
+            input.type = "password";
+            icon.classList.remove("fa-eye-slash");
+            icon.classList.add("fa-eye");
+        }
+    }
+</script>
 
 </body>
 </html>
